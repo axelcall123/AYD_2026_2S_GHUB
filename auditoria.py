@@ -137,18 +137,25 @@ def auditar_codigo(modelo, archivo, codigo):
 {codigo_numerado}
 === FIN DEL CÓDIGO ===
 
-Revisa el código anterior buscando vulnerabilidades de seguridad
-(SQL injection, command injection, eval/exec, credenciales hardcodeadas,
-path traversal), errores lógicos y mal manejo de errores.
+Responde esta lista completa, una línea por punto, con SI (indicando las
+líneas) o NO:
 
-Por cada problema responde exactamente así:
+1. SQL injection (consultas construidas concatenando texto):
+2. Command injection (os.system, subprocess con shell, etc.):
+3. Ejecución dinámica de código (eval, exec, pickle):
+4. Credenciales, claves o contraseñas escritas en el código:
+5. Path traversal (rutas controladas por el usuario):
+6. Manejo incorrecto de errores (except vacío, errores ignorados):
+7. Falta de validación de entradas:
+
+Después, por cada punto con SI escribe:
 
 SEVERIDAD: CRITICAL | HIGH | MEDIUM | LOW
 LÍNEA: <número>
 PROBLEMA: <una frase>
 RECOMENDACIÓN: <una frase>
 
-Solo si el código no tiene ningún problema, responde: NO_ISSUES_FOUND
+Regla de severidad: eval/exec y command injection son CRITICAL.
 """
 
     payload = {
@@ -157,13 +164,14 @@ Solo si el código no tiene ningún problema, responde: NO_ISSUES_FOUND
             {
                 "role": "system",
                 "content": (
-                    "Eres un auditor de código especializado "
-                    "en revisión de seguridad. Sé conciso y directo."
+                    "Eres un auditor de seguridad de código. "
+                    "Analizas el código con rigor y respondes en español, "
+                    "de forma concisa."
                 ),
             },
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0.1,
+        "temperature": 0,
         "max_tokens": 1500,
         "stream": False,
     }
@@ -178,7 +186,7 @@ Solo si el código no tiene ningún problema, responde: NO_ISSUES_FOUND
         response.raise_for_status()
         data = response.json()
 
-        if "choices" in data and len(data["choices"]) > 0:
+        if data.get("choices"):
             return data["choices"][0]["message"]["content"]
         return "Error: La API no devolvió ninguna elección válida."
 
