@@ -206,5 +206,5 @@ def main():
             print(f"\n❌ Error durante la auditoría: {error}")
             sys.exit(1)
 
-if name == "main":
+if __name__ == "__main__":
     main()
