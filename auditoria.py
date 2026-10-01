@@ -11,7 +11,6 @@ LM_STUDIO_URL = os.getenv(
 
 
 def obtener_modelo():
-    """Obtiene el nombre del modelo desde LM Studio o env vars."""
     try:
         response = requests.get(
             f"{LM_STUDIO_URL}/api/v1/models",
@@ -29,19 +28,20 @@ def obtener_modelo():
         if not modelos:
             raise RuntimeError("No se encontró ningún modelo LLM en LM Studio")
 
-        # Usar el modelo configurado en ENV o el primero disponible
+        # CORRECCIÓN 1: Usar 'key' en lugar de 'id' para obtener el nombre
+        ids_disponibles = [m.get("key") for m in modelos]
+        
         modelo_preferido = os.getenv(
             "LM_STUDIO_MODEL",
-            modelos[0].get("id") # Fallback al primer modelo si no hay ENV
+            "qwen3-coder-30b-a3b-instruct"
         )
         
-        # Verificar si el modelo preferido existe en la lista descargada
-        ids_disponibles = [m.get("id") for m in modelos]
+        # Verificar si el modelo preferido existe en la lista
         if modelo_preferido in ids_disponibles:
-            return modelo_preferido
+            return modelo_preferido # CORRECCIÓN 2: Retornar el modelo
         else:
             print(f"Advertencia: Modelo '{modelo_preferido}' no encontrado. Usando el primero disponible: {ids_disponibles[0]}")
-            return ids_disponibles[0]
+            return ids_disponibles[0] # CORRECCIÓN 3: Retornar fallback
 
     except requests.exceptions.RequestException as e:
         raise RuntimeError(f"No se pudo conectar a LM Studio: {e}")
