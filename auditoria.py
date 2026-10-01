@@ -1,20 +1,63 @@
 import os
 import subprocess
-import requests
 import sys
 
+import requests
 
-LM_STUDIO_URL = os.getenv(
-    "LM_STUDIO_URL",
-    "http://192.168.0.27:1234"
-)
+# Cargar .env solo si python-dotenv está instalado (en CI no es necesario).
+# load_dotenv() NO sobrescribe variables que ya existan en el entorno,
+# así que en GitHub Actions siempre manda lo definido en vars/secrets.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
+
+MODELO_POR_DEFECTO = "deepseek-coder-6.7b-base@q4_k_s"
+
+
+def obtener_config():
+    url = os.getenv("LM_STUDIO_URL")
+    if not url:
+        raise RuntimeError(
+            "Falta LM_STUDIO_URL. Defínela en .env (local) "
+            "o como secret/variable en GitHub Actions."
+        )
+
+    # Se usa 'or' (y no el segundo argumento de getenv) porque en GitHub
+    # Actions una variable no definida llega como cadena vacía.
+    return {
+        "url": url.rstrip("/"),
+        "modelo": os.getenv("LM_STUDIO_MODEL") or MODELO_POR_DEFECTO,
+        "timeout": int(os.getenv("LM_STUDIO_TIMEOUT") or "300"),
+        "api_key": os.getenv("LM_STUDIO_API_KEY") or "",  # opcional
+    }
+
+
+try:
+    CONFIG = obtener_config()
+except RuntimeError as e:
+    print(f"❌ Error de configuración: {e}")
+    sys.exit(1)
+
+LM_STUDIO_URL = CONFIG["url"]
+
+
+def headers():
+    h = {"Content-Type": "application/json"}
+    if CONFIG["api_key"]:
+        h["Authorization"] = f"Bearer {CONFIG['api_key']}"
+    return h
 
 
 def obtener_modelo():
     try:
         response = requests.get(
             f"{LM_STUDIO_URL}/api/v1/models",
-            timeout=10
+            headers=headers(),
+            timeout=10,
         )
         response.raise_for_status()
         data = response.json()
@@ -28,20 +71,19 @@ def obtener_modelo():
         if not modelos:
             raise RuntimeError("No se encontró ningún modelo LLM en LM Studio")
 
-        # CORRECCIÓN 1: Usar 'key' en lugar de 'id' para obtener el nombre
+        # En /api/v1/models el identificador está en 'key'
         ids_disponibles = [m.get("key") for m in modelos]
-        
-        modelo_preferido = os.getenv(
-            "LM_STUDIO_MODEL",
-            "qwen3-coder-30b-a3b-instruct"
-        )
-        
-        # Verificar si el modelo preferido existe en la lista
+
+        modelo_preferido = CONFIG["modelo"]
+
         if modelo_preferido in ids_disponibles:
-            return modelo_preferido # CORRECCIÓN 2: Retornar el modelo
-        else:
-            print(f"Advertencia: Modelo '{modelo_preferido}' no encontrado. Usando el primero disponible: {ids_disponibles[0]}")
-            return ids_disponibles[0] # CORRECCIÓN 3: Retornar fallback
+            return modelo_preferido
+
+        print(
+            f"Advertencia: Modelo '{modelo_preferido}' no encontrado. "
+            f"Usando el primero disponible: {ids_disponibles[0]}"
+        )
+        return ids_disponibles[0]
 
     except requests.exceptions.RequestException as e:
         raise RuntimeError(f"No se pudo conectar a LM Studio: {e}")
@@ -50,20 +92,17 @@ def obtener_modelo():
 def obtener_archivos_modificados():
     try:
         resultado = subprocess.run(
-            [
-                "git",
-                "diff",
-                "--name-only",
-                "HEAD^",
-                "HEAD"
-            ],
+            ["git", "diff", "--name-only", "HEAD^", "HEAD"],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
         )
         archivos = resultado.stdout.strip().splitlines()
     except subprocess.CalledProcessError:
-        print("No se pudo obtener el diff (posiblemente primer commit o sin cambios). Se analizarán archivos de ejemplo.")
+        print(
+            "No se pudo obtener el diff "
+            "(posiblemente primer commit o sin cambios)."
+        )
         return []
 
     extensiones = (
@@ -73,8 +112,7 @@ def obtener_archivos_modificados():
     return [
         archivo
         for archivo in archivos
-        if archivo.endswith(extensiones)
-        and os.path.isfile(archivo)
+        if archivo.endswith(extensiones) and os.path.isfile(archivo)
     ]
 
 
@@ -90,8 +128,6 @@ def leer_archivo(ruta):
 
 
 def auditar_codigo(modelo, archivo, codigo):
-    
-    # CORRECCIÓN CRÍTICA: Inyectar el código en el prompt
     prompt = f"""
 Eres un revisor de código dentro de un pipeline CI/CD.
 
@@ -144,32 +180,28 @@ CÓDIGO A ANALIZAR ({archivo}):
                 "content": (
                     "Eres un auditor de código especializado "
                     "en revisión de Pull Requests. Sé conciso y directo."
-                )
+                ),
             },
-            {
-                "role": "user",
-                "content": prompt
-            }
+            {"role": "user", "content": prompt},
         ],
         "temperature": 0.1,
-        "stream": False
+        "stream": False,
     }
 
     try:
         response = requests.post(
             f"{LM_STUDIO_URL}/v1/chat/completions",
             json=payload,
-            timeout=300
+            headers=headers(),
+            timeout=CONFIG["timeout"],
         )
         response.raise_for_status()
         data = response.json()
-        
-        # Validación básica de la respuesta
+
         if "choices" in data and len(data["choices"]) > 0:
             return data["choices"][0]["message"]["content"]
-        else:
-            return "Error: La API no devolvió ninguna elección válida."
-            
+        return "Error: La API no devolvió ninguna elección válida."
+
     except requests.exceptions.RequestException as e:
         raise RuntimeError(f"Error al comunicar con LM Studio: {e}")
 
@@ -193,7 +225,6 @@ def main():
 
     if not archivos:
         print("\nNo se encontraron archivos modificados para analizar.")
-        # Opcional: Salir con éxito si no hay nada que hacer
         sys.exit(0)
 
     print("\nArchivos a analizar:")
@@ -213,19 +244,13 @@ def main():
         print("=" * 70)
 
         try:
-            resultado = auditar_codigo(
-                modelo,
-                archivo,
-                codigo
-            )
-
+            resultado = auditar_codigo(modelo, archivo, codigo)
             print("\n")
             print(resultado)
-
         except Exception as error:
             print(f"\n❌ Error durante la auditoría de {archivo}: {error}")
-            # No salimos inmediatamente para intentar analizar otros archivos si es posible
-            # sys.exit(1) 
-            
+            # Se continúa con los demás archivos
+
+
 if __name__ == "__main__":
     main()

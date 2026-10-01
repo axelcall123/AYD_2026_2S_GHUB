@@ -9,11 +9,16 @@ jobs:
   auditoria-ia:
     runs-on: [self-hosted, Linux, X64, conferenciaIA]
 
+    env:
+      LM_STUDIO_URL: ${{ secrets.LM_STUDIO_URL }}
+      LM_STUDIO_MODEL: ${{ vars.LM_STUDIO_MODEL }}
+      LM_STUDIO_TIMEOUT: ${{ vars.LM_STUDIO_TIMEOUT }}
+
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2 
+          fetch-depth: 2
 
       - name: Mostrar información del entorno
         run: |
@@ -24,18 +29,19 @@ jobs:
           echo "=== Archivos modificados ==="
           git diff --name-only HEAD^ HEAD || true
 
+      - name: Instalar dependencias
+        run: |
+          python3 -m venv .venv
+          . .venv/bin/activate
+          pip install -r requirements.txt
+
       - name: Verificar conexión con LM Studio
         run: |
-          curl --fail --silent \
-            http://192.168.0.27:1234/api/v1/models \
-            > /tmp/lmstudio-models.json
-
+          curl --fail --silent --max-time 10 \
+            "$LM_STUDIO_URL/api/v1/models" > /tmp/lmstudio-models.json
           echo "LM Studio disponible"
-          cat /tmp/lmstudio-models.json
 
       - name: Ejecutar auditoría IA
-        env:
-            LM_STUDIO_URL: http://192.168.0.27:1234
-            LM_STUDIO_MODEL: qwen3-coder-30b-a3b-instruct
         run: |
-          python3 auditoria.py
+          . .venv/bin/activate
+          python auditoria.py
