@@ -126,36 +126,36 @@ NO_ISSUES_FOUND
 No inventes líneas, vulnerabilidades ni comportamiento que no pueda deducirse del código.
 """
 
-payload = {
-    "model": modelo,
-    "messages": [
-        {
-            "role": "system",
-            "content": (
-                "Eres un auditor de código especializado "
-                "en revisión de Pull Requests."
-            )
-        },
-        {
-            "role": "user",
-            "content": prompt
-        }
-    ],
-    "temperature": 0.1,
-    "stream": False
-}
+    payload = {
+        "model": modelo,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "Eres un auditor de código especializado "
+                    "en revisión de Pull Requests."
+                )
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "temperature": 0.1,
+        "stream": False
+    }
 
-response = requests.post(
-    f"{LM_STUDIO_URL}/v1/chat/completions",
-    json=payload,
-    timeout=300
-)
+    response = requests.post(
+        f"{LM_STUDIO_URL}/v1/chat/completions",
+        json=payload,
+        timeout=300
+    )
 
-response.raise_for_status()
+    response.raise_for_status()
 
-data = response.json()
+    data = response.json()
 
-return data["choices"][0]["message"]["content"]
+    return data["choices"][0]["message"]["content"]
 
 def main():
     print("=" * 70)
