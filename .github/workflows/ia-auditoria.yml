@@ -1,0 +1,39 @@
+name: Auditoría de código con IA local
+
+on:
+  pull_request:
+    branches: [develop]
+
+jobs:
+  auditoria-ia:
+    runs-on: [self-hosted, Linux, X64, conferenciaIA]
+
+    env:
+      LM_STUDIO_URL: ${{ secrets.LM_STUDIO_URL }}
+      LM_STUDIO_MODEL: ${{ vars.LM_STUDIO_MODEL }}
+      LM_STUDIO_TIMEOUT: ${{ vars.LM_STUDIO_TIMEOUT }}
+      FALLAR_EN_CRITICAL: ${{ vars.FALLAR_EN_CRITICAL }}
+      BASE_REF: ${{ github.base_ref }}
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # historial completo para comparar contra la rama base
+
+      - name: Instalar dependencias
+        run: |
+          python3 -m venv .venv
+          . .venv/bin/activate
+          pip install -r requirements.txt
+
+      - name: Verificar conexión con LM Studio
+        run: |
+          curl --fail --silent --max-time 10 \
+            "$LM_STUDIO_URL/api/v1/models" > /dev/null
+          echo "LM Studio disponible"
+
+      - name: Ejecutar auditoría IA
+        run: |
+          . .venv/bin/activate
+          python auditoria.py
