@@ -1,6 +1,0 @@
-Este archivo contiene código de prueba.
-
-La aplicación recibe información del usuario
-y posteriormente la procesa.
-
-No existen validaciones adicionales.
