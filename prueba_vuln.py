@@ -17,3 +17,4 @@ def cargar_configuracion(ruta_archivo):
     # Vulnerabilidad: Path Traversal
     with open(ruta_archivo, 'r') as f:
         return f.read()
+
