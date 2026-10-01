@@ -1,0 +1,39 @@
+name: Auditoría de código con IA local
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  auditoria-ia:
+    runs-on: [self-hosted, Linux, X64, conferenciaIA]
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Mostrar información del entorno
+        run: |
+          echo "=== Runner ==="
+          hostname
+          echo "=== Python ==="
+          python3 --version
+          echo "=== Archivos modificados ==="
+          git diff --name-only HEAD^ HEAD || true
+
+      - name: Verificar conexión con LM Studio
+        run: |
+          curl --fail --silent \
+            http://192.168.0.27:1234/api/v1/models \
+            > /tmp/lmstudio-models.json
+
+          echo "LM Studio disponible"
+          cat /tmp/lmstudio-models.json
+
+      - name: Ejecutar auditoría IA
+        env:
+          env:
+            LM_STUDIO_URL: http://192.168.0.27:1234
+            LM_STUDIO_MODEL: qwen3-coder-30b-a3b-instruct
+        run: |
+          python3 auditoria.py
