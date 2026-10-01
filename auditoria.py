@@ -126,50 +126,29 @@ def leer_archivo(ruta):
         print(f"Error leyendo {ruta}: {e}")
         return None
 
-
 def auditar_codigo(modelo, archivo, codigo):
-    prompt = f"""
-Eres un revisor de código dentro de un pipeline CI/CD.
+    codigo_numerado = "\n".join(
+        f"{i}: {linea}" for i, linea in enumerate(codigo.splitlines(), 1)
+    )
 
-Tu objetivo es detectar problemas reales introducidos por el cambio.
+    prompt = f"""Archivo: {archivo}
 
-Analiza únicamente problemas respaldados por el código proporcionado.
+=== CÓDIGO ===
+{codigo_numerado}
+=== FIN DEL CÓDIGO ===
 
-Prioriza:
-1. Vulnerabilidades de seguridad.
-2. Errores lógicos.
-3. Manejo incorrecto de errores.
-4. Problemas de concurrencia.
-5. Validación insuficiente de entradas.
-6. Uso incorrecto de APIs.
-7. Problemas que puedan provocar fallos en producción.
-8. Problemas de mantenibilidad relevantes.
+Revisa el código anterior buscando vulnerabilidades de seguridad
+(SQL injection, command injection, eval/exec, credenciales hardcodeadas,
+path traversal), errores lógicos y mal manejo de errores.
 
-NO marques como problema:
-- preferencias de estilo personales;
-- refactorizaciones innecesarias;
-- cambios que no tengan impacto real;
-- problemas hipotéticos sin evidencia.
-
-Para cada hallazgo devuelve:
+Por cada problema responde exactamente así:
 
 SEVERIDAD: CRITICAL | HIGH | MEDIUM | LOW
+LÍNEA: <número>
+PROBLEMA: <una frase>
+RECOMENDACIÓN: <una frase>
 
-ARCHIVO:
-LÍNEA:
-PROBLEMA:
-EXPLICACIÓN:
-RECOMENDACIÓN:
-
-Si no encuentras problemas reales:
-NO_ISSUES_FOUND
-
-No inventes líneas, vulnerabilidades ni comportamiento que no pueda deducirse del código.
-
----
-CÓDIGO A ANALIZAR ({archivo}):
----
-{codigo}
+Solo si el código no tiene ningún problema, responde: NO_ISSUES_FOUND
 """
 
     payload = {
@@ -179,12 +158,13 @@ CÓDIGO A ANALIZAR ({archivo}):
                 "role": "system",
                 "content": (
                     "Eres un auditor de código especializado "
-                    "en revisión de Pull Requests. Sé conciso y directo."
+                    "en revisión de seguridad. Sé conciso y directo."
                 ),
             },
             {"role": "user", "content": prompt},
         ],
         "temperature": 0.1,
+        "max_tokens": 1500,
         "stream": False,
     }
 
@@ -204,7 +184,6 @@ CÓDIGO A ANALIZAR ({archivo}):
 
     except requests.exceptions.RequestException as e:
         raise RuntimeError(f"Error al comunicar con LM Studio: {e}")
-
 
 def main():
     print("=" * 70)
