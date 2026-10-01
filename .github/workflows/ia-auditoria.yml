@@ -3,7 +3,7 @@ name: Auditoría de código con IA local
 on:
   push:
     branches:
-      - feature_init_ia
+      - feature/init_ia
 
 jobs:
   auditoria-ia:
