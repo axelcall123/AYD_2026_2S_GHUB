@@ -207,4 +207,4 @@ def main():
             sys.exit(1)
 
 if name == "main":
-main()
+    main()
