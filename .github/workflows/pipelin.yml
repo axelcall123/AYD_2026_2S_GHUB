@@ -1,0 +1,80 @@
+name: Pipeline CI/CD Go
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+jobs:
+  # ---------- FASE 1: TEST (CI) ----------
+  test:
+    name: 1. Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Instalar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Análisis estático
+        run: go vet ./...
+
+      - name: Pruebas unitarias e integración
+        run: go test -race -cover ./...
+
+  # ---------- FASE 2: BUILD (CI) ----------
+  build:
+    name: 2. Build
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Compilar binario
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -ldflags="-s -w" -o bin/api ./cmd/api
+
+      - name: Prueba E2E mínima (smoke test)
+        run: |
+          PORT=8080 ./bin/api &
+          sleep 2
+          curl --fail --silent http://localhost:8080/salud
+          curl --fail --silent -X POST http://localhost:8080/tareas \
+            -d '{"titulo":"smoke test"}'
+          kill %1
+
+      - name: Guardar artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: tareas-api-linux-amd64
+          path: bin/api
+
+  # ---------- FASE 3: DEPLOY (CD) ----------
+  deploy:
+    name: 3. Deploy
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production   # permite exigir aprobación manual en Settings → Environments
+
+    steps:
+      - name: Descargar artefacto
+        uses: actions/download-artifact@v4
+        with:
+          name: tareas-api-linux-amd64
+
+      - name: Desplegar (simulado)
+        run: |
+          ls -lh api
+          echo "Desplegando a producción (simulado)..."
