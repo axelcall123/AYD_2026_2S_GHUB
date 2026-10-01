@@ -158,54 +158,53 @@ data = response.json()
 return data["choices"][0]["message"]["content"]
 
 def main():
-
-print("=" * 70)
-print("🤖 AUDITORÍA DE CÓDIGO CON IA LOCAL")
-print("=" * 70)
-
-print("\nConectando con LM Studio...")
-
-modelo = obtener_modelo()
-
-print(f"Modelo utilizado: {modelo}")
-
-archivos = obtener_archivos_modificados()
-
-if not archivos:
-    print("\nNo se encontraron archivos modificados.")
-    sys.exit(0)
-
-print("\nArchivos a analizar:")
-
-for archivo in archivos:
-    print(f"  - {archivo}")
-
-for archivo in archivos:
-
-    codigo = leer_archivo(archivo)
-
-    if codigo is None:
-        print(f"\nNo se pudo leer: {archivo}")
-        continue
-
-    print("\n")
     print("=" * 70)
-    print(f"🔍 ANALIZANDO: {archivo}")
+    print("🤖 AUDITORÍA DE CÓDIGO CON IA LOCAL")
     print("=" * 70)
 
-    try:
-        resultado = auditar_codigo(
-            modelo,
-            archivo,
-            codigo
-        )
+    print("\nConectando con LM Studio...")
+
+    modelo = obtener_modelo()
+
+    print(f"Modelo utilizado: {modelo}")
+
+    archivos = obtener_archivos_modificados()
+
+    if not archivos:
+        print("\nNo se encontraron archivos modificados.")
+        sys.exit(0)
+
+    print("\nArchivos a analizar:")
+
+    for archivo in archivos:
+        print(f"  - {archivo}")
+
+    for archivo in archivos:
+
+        codigo = leer_archivo(archivo)
+
+        if codigo is None:
+            print(f"\nNo se pudo leer: {archivo}")
+            continue
 
         print("\n")
-        print(resultado)
+        print("=" * 70)
+        print(f"🔍 ANALIZANDO: {archivo}")
+        print("=" * 70)
 
-    except Exception as error:
-        print(f"\n❌ Error durante la auditoría: {error}")
-        sys.exit(1)
+        try:
+            resultado = auditar_codigo(
+                modelo,
+                archivo,
+                codigo
+            )
+
+            print("\n")
+            print(resultado)
+
+        except Exception as error:
+            print(f"\n❌ Error durante la auditoría: {error}")
+            sys.exit(1)
 
 if name == "main":
 main()
