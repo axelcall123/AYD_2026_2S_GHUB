@@ -4,4 +4,3 @@ La aplicación recibe información del usuario
 y posteriormente la procesa.
 
 No existen validaciones adicionales.
-
