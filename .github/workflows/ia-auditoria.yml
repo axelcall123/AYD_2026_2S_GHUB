@@ -1,8 +1,9 @@
 name: Auditoría de código con IA local
 
-#on:
-  #pull_request:
-  #  types: [opened, synchronize, reopened]
+on:
+  push:
+    branches:
+      - feature_init_ia
 
 jobs:
   auditoria-ia:
