@@ -45,7 +45,7 @@ except RuntimeError as e:
     sys.exit(1)
 
 LM_STUDIO_URL = CONFIG["url"]
-
+EXCLUIR = {"auditoria.py"}
 EXTENSIONES = (".py"
                #, ".go", ".py", ".js", ".ts", ".java", ".c", ".cpp", ".cs"
                )
@@ -106,9 +106,10 @@ def obtener_archivos_modificados():
     return [
         a
         for a in resultado.stdout.strip().splitlines()
-        if a.endswith(EXTENSIONES) and os.path.isfile(a)
-    ]
-
+        if a.endswith(EXTENSIONES)
+        and a not in EXCLUIR
+        and os.path.isfile(a)
+    ] 
 
 def leer_archivo(ruta):
     try:
@@ -194,7 +195,9 @@ Reglas:
 
 def tiene_critical(resultado):
     return re.search(
-        r"^\s*\**SEVERIDAD:?\**\s*CRITICAL\s*$", resultado, re.MULTILINE | re.IGNORECASE
+        r"SEVERIDAD:?\**\s*CRITICAL\b(?!\s*\|\s*HIGH)",
+        resultado,
+        re.IGNORECASE,
     ) is not None
 
 
