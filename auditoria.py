@@ -11,28 +11,40 @@ LM_STUDIO_URL = os.getenv(
 
 
 def obtener_modelo():
-    response = requests.get(
-        f"{LM_STUDIO_URL}/api/v1/models",
-        timeout=10
-    )
+    """Obtiene el nombre del modelo desde LM Studio o env vars."""
+    try:
+        response = requests.get(
+            f"{LM_STUDIO_URL}/api/v1/models",
+            timeout=10
+        )
+        response.raise_for_status()
+        data = response.json()
 
-    response.raise_for_status()
+        modelos = [
+            modelo
+            for modelo in data.get("models", [])
+            if modelo.get("type") == "llm"
+        ]
 
-    data = response.json()
+        if not modelos:
+            raise RuntimeError("No se encontró ningún modelo LLM en LM Studio")
 
-    modelos = [
-        modelo
-        for modelo in data.get("models", [])
-        if modelo.get("type") == "llm"
-    ]
+        # Usar el modelo configurado en ENV o el primero disponible
+        modelo_preferido = os.getenv(
+            "LM_STUDIO_MODEL",
+            modelos[0].get("id") # Fallback al primer modelo si no hay ENV
+        )
+        
+        # Verificar si el modelo preferido existe en la lista descargada
+        ids_disponibles = [m.get("id") for m in modelos]
+        if modelo_preferido in ids_disponibles:
+            return modelo_preferido
+        else:
+            print(f"Advertencia: Modelo '{modelo_preferido}' no encontrado. Usando el primero disponible: {ids_disponibles[0]}")
+            return ids_disponibles[0]
 
-    if not modelos:
-        raise RuntimeError("No se encontró ningún modelo LLM en LM Studio")
-
-    MODELO = os.getenv(
-        "LM_STUDIO_MODEL",
-        "qwen3-coder-30b-a3b-instruct"
-    )
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"No se pudo conectar a LM Studio: {e}")
 
 
 def obtener_archivos_modificados():
@@ -49,23 +61,13 @@ def obtener_archivos_modificados():
             text=True,
             check=True
         )
-
         archivos = resultado.stdout.strip().splitlines()
-
     except subprocess.CalledProcessError:
-        print("No se pudo obtener el diff. Se analizarán archivos de ejemplo.")
+        print("No se pudo obtener el diff (posiblemente primer commit o sin cambios). Se analizarán archivos de ejemplo.")
         return []
 
     extensiones = (
-        ".go",
-        ".py",
-        ".js",
-        ".ts",
-        ".java",
-        ".c",
-        ".cpp",
-        ".cs",
-        ".txt"
+        ".go", ".py", ".js", ".ts", ".java", ".c", ".cpp", ".cs", ".txt"
     )
 
     return [
@@ -82,10 +84,14 @@ def leer_archivo(ruta):
             return archivo.read()
     except UnicodeDecodeError:
         return None
+    except Exception as e:
+        print(f"Error leyendo {ruta}: {e}")
+        return None
 
 
 def auditar_codigo(modelo, archivo, codigo):
-
+    
+    # CORRECCIÓN CRÍTICA: Inyectar el código en el prompt
     prompt = f"""
 Eres un revisor de código dentro de un pipeline CI/CD.
 
@@ -94,7 +100,6 @@ Tu objetivo es detectar problemas reales introducidos por el cambio.
 Analiza únicamente problemas respaldados por el código proporcionado.
 
 Prioriza:
-
 1. Vulnerabilidades de seguridad.
 2. Errores lógicos.
 3. Manejo incorrecto de errores.
@@ -124,6 +129,11 @@ Si no encuentras problemas reales:
 NO_ISSUES_FOUND
 
 No inventes líneas, vulnerabilidades ni comportamiento que no pueda deducirse del código.
+
+---
+CÓDIGO A ANALIZAR ({archivo}):
+---
+{codigo}
 """
 
     payload = {
@@ -133,7 +143,7 @@ No inventes líneas, vulnerabilidades ni comportamiento que no pueda deducirse d
                 "role": "system",
                 "content": (
                     "Eres un auditor de código especializado "
-                    "en revisión de Pull Requests."
+                    "en revisión de Pull Requests. Sé conciso y directo."
                 )
             },
             {
@@ -145,17 +155,24 @@ No inventes líneas, vulnerabilidades ni comportamiento que no pueda deducirse d
         "stream": False
     }
 
-    response = requests.post(
-        f"{LM_STUDIO_URL}/v1/chat/completions",
-        json=payload,
-        timeout=300
-    )
+    try:
+        response = requests.post(
+            f"{LM_STUDIO_URL}/v1/chat/completions",
+            json=payload,
+            timeout=300
+        )
+        response.raise_for_status()
+        data = response.json()
+        
+        # Validación básica de la respuesta
+        if "choices" in data and len(data["choices"]) > 0:
+            return data["choices"][0]["message"]["content"]
+        else:
+            return "Error: La API no devolvió ninguna elección válida."
+            
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"Error al comunicar con LM Studio: {e}")
 
-    response.raise_for_status()
-
-    data = response.json()
-
-    return data["choices"][0]["message"]["content"]
 
 def main():
     print("=" * 70)
@@ -164,27 +181,30 @@ def main():
 
     print("\nConectando con LM Studio...")
 
-    modelo = obtener_modelo()
+    try:
+        modelo = obtener_modelo()
+    except RuntimeError as e:
+        print(f"❌ Error crítico: {e}")
+        sys.exit(1)
 
     print(f"Modelo utilizado: {modelo}")
 
     archivos = obtener_archivos_modificados()
 
     if not archivos:
-        print("\nNo se encontraron archivos modificados.")
+        print("\nNo se encontraron archivos modificados para analizar.")
+        # Opcional: Salir con éxito si no hay nada que hacer
         sys.exit(0)
 
     print("\nArchivos a analizar:")
-
     for archivo in archivos:
         print(f"  - {archivo}")
 
     for archivo in archivos:
-
         codigo = leer_archivo(archivo)
 
         if codigo is None:
-            print(f"\nNo se pudo leer: {archivo}")
+            print(f"\n⚠️ No se pudo leer: {archivo}")
             continue
 
         print("\n")
@@ -203,8 +223,9 @@ def main():
             print(resultado)
 
         except Exception as error:
-            print(f"\n❌ Error durante la auditoría: {error}")
-            sys.exit(1)
-
+            print(f"\n❌ Error durante la auditoría de {archivo}: {error}")
+            # No salimos inmediatamente para intentar analizar otros archivos si es posible
+            # sys.exit(1) 
+            
 if __name__ == "__main__":
     main()
